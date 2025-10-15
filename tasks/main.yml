@@ -1,0 +1,79 @@
+---
+- name: Ensure UFW is installed
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+    update_cache: yes
+  when: firewall_enabled
+  tags: [firewall]
+
+- name: Configure IPv6 toggle
+  ansible.builtin.lineinfile:
+    path: /etc/default/ufw
+    regexp: '^IPV6='
+    line: "IPV6={{ firewall_ipv6 | ternary('yes','no') }}"
+    create: yes
+  when: firewall_enabled
+  notify: firewall-reload
+  tags: [firewall]
+
+- name: Set logging level
+  community.general.ufw:
+    logging: "{{ firewall_logging_level if firewall_enabled else 'off' }}"
+  tags: [firewall]
+
+- name: Set default incoming policy
+  community.general.ufw:
+    direction: incoming
+    policy: "{{ firewall_default_incoming }}"
+  when: firewall_enabled
+  tags: [firewall]
+
+- name: Set default outgoing policy
+  community.general.ufw:
+    direction: outgoing
+    policy: "{{ firewall_default_outgoing }}"
+  when: firewall_enabled
+  tags: [firewall]
+
+- name: (Exclusive) Disable & reset UFW rules
+  ansible.builtin.shell: |
+    set -euo pipefail
+    ufw --force disable
+    ufw --force reset
+  args:
+    executable: /bin/bash
+  when:
+    - firewall_enabled
+    - firewall_exclusive_reset
+    - firewall_confirm_reset
+  tags: [firewall]
+
+- name: Allow or rate-limit SSH
+  community.general.ufw:
+    rule: "{{ firewall_ssh_rate_limit | ternary('limit','allow') }}"
+    port: "{{ item }}"
+    proto: tcp
+    comment: "SSH (managed)"
+  loop: "{{ firewall_ssh_ports }}"
+  when: firewall_enabled
+  tags: [firewall]
+
+- name: Apply unified rules
+  community.general.ufw:
+    rule: "{{ item.action | default('allow') }}"
+    port: "{{ (item.port | string) if (item.port is defined) else omit }}"
+    proto: "{{ item.proto | default(omit) }}"
+    from_ip: "{{ item.from | default(omit) }}"
+    comment: "{{ item.comment | default(omit) }}"
+  loop: "{{ firewall_rules }}"
+  when: firewall_enabled
+  tags: [firewall]
+
+- name: Enable UFW (if requested)
+  community.general.ufw:
+    state: enabled
+  when:
+    - firewall_enabled
+    - firewall_auto_enable
+  tags: [firewall]

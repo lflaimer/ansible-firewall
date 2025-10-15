@@ -1,0 +1,5 @@
+---
+- name: Reload UFW
+  ansible.builtin.command: ufw reload
+  listen: firewall-reload
+  changed_when: false
