@@ -17,6 +17,29 @@
   notify: firewall-reload
   tags: [firewall]
 
+- name: Set default forward policy (ACCEPT) if enabled
+  ansible.builtin.lineinfile:
+    path: /etc/default/ufw
+    regexp: '^DEFAULT_FORWARD_POLICY='
+    line: 'DEFAULT_FORWARD_POLICY="{{ firewall_accept_forward | ternary("ACCEPT","DROP") }}"'
+    create: yes
+  when: firewall_enabled
+  notify: firewall-reload
+  tags: [firewall]
+
+- name: Ensure bridge netfilter sysctls are set
+  ansible.builtin.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/99-k8s-bridge.conf
+    state: present
+    reload: yes
+  loop:
+    - { name: "net.bridge.bridge-nf-call-iptables",  value: "{{ 1 if firewall_set_bridge_sysctls else 0 }}" }
+    - { name: "net.bridge.bridge-nf-call-ip6tables", value: "{{ 1 if firewall_set_bridge_sysctls else 0 }}" }
+  when: firewall_enabled
+  tags: [firewall]
+
 - name: Set logging level
   community.general.ufw:
     logging: "{{ firewall_logging_level if firewall_enabled else 'off' }}"
@@ -55,19 +78,61 @@
     port: "{{ item }}"
     proto: tcp
     comment: "SSH (managed)"
-  loop: "{{ firewall_ssh_ports }}"
+  loop: "{{ firewall_ssh_ports | default([22]) }}"
   when: firewall_enabled
   tags: [firewall]
 
-- name: Apply unified rules
+- name: Apply standard allow/deny rules (port/proto/from)
   community.general.ufw:
     rule: "{{ item.action | default('allow') }}"
     port: "{{ (item.port | string) if (item.port is defined) else omit }}"
     proto: "{{ item.proto | default(omit) }}"
     from_ip: "{{ item.from | default(omit) }}"
     comment: "{{ item.comment | default(omit) }}"
-  loop: "{{ firewall_rules }}"
-  when: firewall_enabled
+  loop: "{{ firewall_rules | default([]) }}"
+  when:
+    - firewall_enabled
+    - item.allow_in_if is not defined
+    - item.allow_out_if is not defined
+    - item.from_cidr is not defined
+  tags: [firewall]
+
+- name: Apply interface IN rules
+  community.general.ufw:
+    rule: allow
+    direction: incoming
+    interface: "{{ item.allow_in_if }}"
+    comment: "{{ item.comment | default(omit) }}"
+  loop: "{{ firewall_rules | default([]) }}"
+  when:
+    - firewall_enabled
+    - item.allow_in_if is defined
+  tags: [firewall]
+
+- name: Apply interface OUT rules
+  community.general.ufw:
+    rule: allow
+    direction: outgoing
+    interface: "{{ item.allow_out_if }}"
+    comment: "{{ item.comment | default(omit) }}"
+  loop: "{{ firewall_rules | default([]) }}"
+  when:
+    - firewall_enabled
+    - item.allow_out_if is defined
+  tags: [firewall]
+
+- name: Apply CIDR-based rules (from_cidr)
+  community.general.ufw:
+    rule: allow
+    direction: incoming
+    from_ip: "{{ item.from_cidr }}"
+    port: "{{ (item.port | string) if (item.port is defined) else omit }}"
+    proto: "{{ item.proto | default(omit) }}"
+    comment: "{{ item.comment | default(omit) }}"
+  loop: "{{ firewall_rules | default([]) }}"
+  when:
+    - firewall_enabled
+    - item.from_cidr is defined
   tags: [firewall]
 
 - name: Enable UFW (if requested)
@@ -77,3 +142,7 @@
     - firewall_enabled
     - firewall_auto_enable
   tags: [firewall]
+
+- name: firewall-reload
+  ansible.builtin.command: ufw reload
+  listen: firewall-reload

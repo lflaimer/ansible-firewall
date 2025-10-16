@@ -1,12 +1,15 @@
----
 firewall_enabled: true
-firewall_ipv6: false
-firewall_logging_level: medium
-firewall_default_incoming: deny
-firewall_default_outgoing: allow
-firewall_ssh_ports: [22]
-firewall_ssh_rate_limit: true
 firewall_auto_enable: true
 firewall_exclusive_reset: false
 firewall_confirm_reset: false
-firewall_rules: []
+firewall_ipv6: false
+firewall_logging_level: low
+firewall_default_incoming: deny
+firewall_default_outgoing: allow
+
+firewall_accept_forward: true
+firewall_set_bridge_sysctls: true
+
+firewall_pod_cidr: "10.42.0.0/16"
+firewall_svc_cidr: "10.43.0.0/16"
+
