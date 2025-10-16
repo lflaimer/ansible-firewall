@@ -143,6 +143,3 @@
     - firewall_auto_enable
   tags: [firewall]
 
-- name: firewall-reload
-  ansible.builtin.command: ufw reload
-  listen: firewall-reload
