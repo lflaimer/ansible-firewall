@@ -100,7 +100,7 @@
 - name: Apply interface IN rules
   community.general.ufw:
     rule: allow
-    direction: incoming
+    direction: in
     interface: "{{ item.allow_in_if }}"
     comment: "{{ item.comment | default(omit) }}"
   loop: "{{ firewall_rules | default([]) }}"
@@ -112,7 +112,7 @@
 - name: Apply interface OUT rules
   community.general.ufw:
     rule: allow
-    direction: outgoing
+    direction: out
     interface: "{{ item.allow_out_if }}"
     comment: "{{ item.comment | default(omit) }}"
   loop: "{{ firewall_rules | default([]) }}"
@@ -124,7 +124,7 @@
 - name: Apply CIDR-based rules (from_cidr)
   community.general.ufw:
     rule: allow
-    direction: incoming
+    direction: in
     from_ip: "{{ item.from_cidr }}"
     port: "{{ (item.port | string) if (item.port is defined) else omit }}"
     proto: "{{ item.proto | default(omit) }}"
